@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pg", "@google-cloud/documentai"],
+  serverExternalPackages: ["pg", "@google-cloud/documentai", "sharp"],
   env: {
     AUTH_SECRET: process.env.AUTH_SECRET ?? "",
     DATABASE_URL: process.env.DATABASE_URL ?? "",

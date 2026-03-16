@@ -61,6 +61,7 @@ Examples:
 export async function parseWithGemini(
   ocrText: string,
   tableData: string,
+  formFieldData = "",
 ): Promise<PrescriptionOcrResult["patient"] & {
   institution: PrescriptionOcrResult["institution"];
   doctor: PrescriptionOcrResult["doctor"];
@@ -86,6 +87,9 @@ ${ocrText}
 
 【テーブルデータ】
 ${tableData || "（なし）"}
+
+【フォームフィールド（Form Parser抽出）】
+${formFieldData || "（なし）"}
 
 上記を解析して処方箋情報をJSONで返してください。`;
 

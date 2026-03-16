@@ -16,7 +16,7 @@ export async function runOcrPipeline(
   const start = Date.now();
 
   try {
-    // Step 1: Document AI でテキスト抽出
+    // Step 1: Document AI でテキスト抽出（画像は自動リサイズ済み）
     const docAiResult = await extractTextWithDocumentAi(imageBuffer, mimeType);
 
     // Document AI の信頼度が低すぎる場合はフォールバック
@@ -25,14 +25,20 @@ export async function runOcrPipeline(
       return await parseWithClaudeVision(imageBuffer, mimeType);
     }
 
-    // Step 2: Gemini でパース
+    // Step 2: テーブルデータ整形
     const tableText = docAiResult.tables
       .map((t, i) =>
         `テーブル${i + 1}:\nヘッダー: ${t.headers.join(" | ")}\n${t.rows.map((r) => r.join(" | ")).join("\n")}`
       )
       .join("\n\n");
 
-    const geminiResult = await parseWithGemini(docAiResult.text, tableText);
+    // Form Parser のフォームフィールド整形（Form Parser 使用時のみ値あり）
+    const formFieldText = docAiResult.formFields.length > 0
+      ? docAiResult.formFields.map((f) => `${f.name}: ${f.value}`).join("\n")
+      : "";
+
+    // Step 3: Gemini でパース（thinking オフ・整合性チェック込み）
+    const geminiResult = await parseWithGemini(docAiResult.text, tableText, formFieldText);
 
     // Gemini パース後も信頼度が低ければフォールバック
     if (geminiResult.overallConfidence < FALLBACK_THRESHOLD) {
@@ -64,7 +70,6 @@ export async function runOcrPipeline(
     };
   } catch (err) {
     console.error("通常OCRパイプラインエラー:", err);
-    // エラー時は Claude Vision フォールバック
     return await parseWithClaudeVision(imageBuffer, mimeType);
   }
 }
