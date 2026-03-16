@@ -4,6 +4,55 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ブランドカラーパレット */
+@theme {
+  /* 裕生堂オレンジ */
+  --color-primary-50: #FFF7ED;
+  --color-primary-100: #FFEDD5;
+  --color-primary-200: #FED7AA;
+  --color-primary-300: #FDBA74;
+  --color-primary-400: #FB923C;
+  --color-primary-500: #F5940A;
+  --color-primary-600: #EA780C;
+  --color-primary-700: #C2590A;
+  --color-primary-800: #9A3F0D;
+  --color-primary-900: #7C310E;
+  --color-primary-950: #431507;
+
+  /* ウォームグレー */
+  --color-neutral-50: #FAFAF9;
+  --color-neutral-100: #F5F5F4;
+  --color-neutral-200: #E7E5E4;
+  --color-neutral-300: #D6D3D1;
+  --color-neutral-400: #A8A29E;
+  --color-neutral-500: #78716C;
+  --color-neutral-600: #57534E;
+  --color-neutral-700: #44403C;
+  --color-neutral-800: #292524;
+  --color-neutral-900: #1C1917;
+
+  /* セマンティックカラー */
+  --color-success-50: #F0FDF4;
+  --color-success-500: #22C55E;
+  --color-success-700: #15803D;
+  --color-warning-50: #FFFBEB;
+  --color-warning-300: #FCD34D;
+  --color-warning-500: #F59E0B;
+  --color-warning-700: #B45309;
+  --color-danger-50: #FEF2F2;
+  --color-danger-300: #FCA5A5;
+  --color-danger-500: #EF4444;
+  --color-danger-600: #DC2626;
+  --color-danger-700: #B91C1C;
+  --color-info-50: #EFF6FF;
+  --color-info-500: #3B82F6;
+  --color-info-700: #1D4ED8;
+
+  /* フォント */
+  --font-sans: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -48,72 +97,38 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.993 0.002 75);      /* neutral-50 相当 */
+  --foreground: oklch(0.2 0.01 60);         /* neutral-900 相当 */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.2 0.01 60);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.2 0.01 60);
+  --primary: oklch(0.65 0.17 55);           /* primary-500: #F5940A */
+  --primary-foreground: oklch(1 0 0);       /* white */
+  --secondary: oklch(0.96 0.005 75);        /* neutral-100 相当 */
+  --secondary-foreground: oklch(0.3 0.01 60);
+  --muted: oklch(0.96 0.005 75);
+  --muted-foreground: oklch(0.5 0.01 60);   /* neutral-500 相当 */
+  --accent: oklch(0.97 0.008 55);           /* primary-50 相当 */
+  --accent-foreground: oklch(0.45 0.15 55); /* primary-700 相当 */
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: oklch(0.91 0.006 75);           /* neutral-200 相当 */
+  --input: oklch(0.91 0.006 75);
+  --ring: oklch(0.65 0.17 55 / 30%);       /* primary-500 + 透明度 */
+  --chart-1: oklch(0.65 0.17 55);
+  --chart-2: oklch(0.6 0.14 160);
+  --chart-3: oklch(0.55 0.13 250);
+  --chart-4: oklch(0.7 0.15 100);
+  --chart-5: oklch(0.65 0.2 30);
+  --radius: 0.5rem;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.35 0.01 60);
+  --sidebar-primary: oklch(0.65 0.17 55);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.97 0.008 55);
+  --sidebar-accent-foreground: oklch(0.45 0.15 55);
+  --sidebar-border: oklch(0.91 0.006 75);
+  --sidebar-ring: oklch(0.65 0.17 55 / 30%);
 }
 
 @layer base {
@@ -121,7 +136,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
   }
   html {
     @apply font-sans;
