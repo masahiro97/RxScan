@@ -24,7 +24,6 @@ export async function getSignedUploadUrl(
     Bucket: BUCKET,
     Key: key,
     ContentType: contentType,
-    ServerSideEncryption: "AES256",
   });
   return getSignedUrl(s3, command, { expiresIn });
 }
