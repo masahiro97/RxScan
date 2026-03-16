@@ -14,6 +14,7 @@ const loginSchema = z.object({
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
+  trustHost: true,
   session: {
     strategy: "jwt",
     maxAge: 30 * 60, // 30分

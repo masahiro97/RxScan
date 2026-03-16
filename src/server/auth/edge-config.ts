@@ -7,6 +7,7 @@ import type { NextAuthConfig } from "next-auth";
 
 const edgeAuthConfig: NextAuthConfig = {
   secret: process.env.AUTH_SECRET,
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [], // Edge では provider 不要（JWT 検証のみ）
