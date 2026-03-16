@@ -6,16 +6,39 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import type { Schema } from "@google/generative-ai";
 import type { PrescriptionOcrResult } from "./types";
 
-const SYSTEM_PROMPT = `あなたは日本の調剤薬局向け処方箋解析システムです。
-入力された処方箋テキスト（OCR結果）を解析し、指定されたJSON形式に変換してください。
+const SYSTEM_PROMPT = `You are a Japanese pharmacy prescription OCR parser. Extract structured data from Japanese prescription text (処方箋) and return valid JSON.
 
-重要なルール:
-- 読み取れない項目は null にする
-- 信頼度 (confidence) は 0-100 で、確信度が高い場合は90以上、不明瞭な場合は60未満
-- 日付は YYYY-MM-DD 形式
-- 薬剤名はOCR読み取りのまま（正規化しない）
-- Rp番号は処方明細の番号（1, 2, 3...）
-- 負担割合は数値で (10, 20, 30のいずれか)`;
+## Output rules
+- Missing or unreadable fields → null
+- confidence: 0-100 integer (≥90 = high confidence, <60 = uncertain)
+- All dates → "YYYY-MM-DD" format
+- Medicine names → copy exactly as written (no normalization)
+- Rp number → sequential integer (1, 2, 3...) per prescription group
+- Copay ratio (負担割合) → integer: 10, 20, or 30
+
+## Date fields — CRITICAL distinction
+| Field | Japanese label | Meaning |
+|-------|---------------|---------|
+| prescription.date | 交付年月日 | Date the doctor issued the prescription |
+| prescription.expiryDate | 処方箋の使用期間 | Last date the patient can have it dispensed |
+
+Rules:
+- "交付年月日" or "処方日" → prescription.date only. Never put it in expiryDate.
+- "処方箋の使用期間" or "使用期限" → prescription.expiryDate only.
+- If expiryDate says "交付の日を含めて4日以内" → calculate: prescription.date + 3 days.
+- If expiryDate says "交付の日を含めてN日以内" → calculate: prescription.date + (N-1) days.
+- If no usage period is stated → expiryDate = null.
+
+## Total quantity calculation
+For each prescription item, totalQuantity must be calculated as:
+  totalQuantity = (dose per day) × durationDays
+
+Examples:
+- "1回1錠 1日3回 7日分" → dose/day=3錠, durationDays=7, totalQuantity="21錠"
+- "1日1錠 30日分" → dose/day=1錠, durationDays=30, totalQuantity="30錠"
+- "1回2錠 1日2回 14日分" → dose/day=4錠, durationDays=14, totalQuantity="56錠"
+- If totalQuantity is explicitly printed on the prescription, use that value.
+- If cannot be calculated → null.`;
 
 export async function parseWithGemini(
   ocrText: string,

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ZoomIn, ZoomOut, RotateCw, Sun, SunDim } from "lucide-react";
 
 interface ImageViewerProps {
-  images: { url: string; pageNumber: number }[];
+  images: { url: string; pageNumber: number; mimeType?: string }[];
 }
 
 export function ImageViewer({ images }: ImageViewerProps) {
@@ -76,20 +76,37 @@ export function ImageViewer({ images }: ImageViewerProps) {
         className="flex-1 overflow-auto flex items-start justify-center p-4"
         style={{ cursor: "grab" }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={image.url}
-          alt={`処方箋 p.${image.pageNumber}`}
-          style={{
-            transform: `scale(${zoom}) rotate(${rotation}deg)`,
-            transformOrigin: "top center",
-            filter: `brightness(${brightness}%)`,
-            maxWidth: "none",
-            transition: "transform 0.15s ease",
-          }}
-          className="shadow-2xl rounded"
-          draggable={false}
-        />
+        {image.mimeType === "application/pdf" ? (
+          <iframe
+            src={image.url}
+            title={`処方箋 p.${image.pageNumber}`}
+            style={{
+              width: `${Math.round(zoom * 100)}%`,
+              minWidth: "600px",
+              height: "calc(100vh - 10rem)",
+              border: "none",
+              filter: `brightness(${brightness}%)`,
+              transform: rotation ? `rotate(${rotation}deg)` : undefined,
+              transformOrigin: "top center",
+              transition: "transform 0.15s ease",
+            }}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={image.url}
+            alt={`処方箋 p.${image.pageNumber}`}
+            style={{
+              transform: `scale(${zoom}) rotate(${rotation}deg)`,
+              transformOrigin: "top center",
+              filter: `brightness(${brightness}%)`,
+              maxWidth: "none",
+              transition: "transform 0.15s ease",
+            }}
+            className="shadow-2xl rounded"
+            draggable={false}
+          />
+        )}
       </div>
     </div>
   );

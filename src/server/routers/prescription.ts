@@ -330,9 +330,40 @@ async function runOcrInBackground(
       processingTimeMs: result.meta.processingTimeMs,
     });
 
+    // 患者情報を upsert（名前がある場合のみ）
+    let patientId: string | undefined;
+    if (result.patient.name) {
+      const existing = await db.query.patients.findFirst({
+        where: and(
+          eq(patients.storeId, storeId),
+          ...(result.patient.insurerNumber && result.patient.insuredNumber
+            ? [eq(patients.insurerNumber, result.patient.insurerNumber),
+               eq(patients.insuredNumber, result.patient.insuredNumber)]
+            : [eq(patients.name, result.patient.name)]),
+        ),
+      });
+      if (existing) {
+        patientId = existing.id;
+      } else {
+        const [newPatient] = await db.insert(patients).values({
+          storeId,
+          name: result.patient.name,
+          nameKana: result.patient.nameKana,
+          birthDate: result.patient.birthDate,
+          gender: result.patient.gender,
+          insurerNumber: result.patient.insurerNumber,
+          insuredNumber: result.patient.insuredNumber,
+          insuranceSymbol: result.patient.insuranceSymbol,
+          copayRatio: result.patient.copayRatio,
+        }).returning();
+        patientId = newPatient?.id;
+      }
+    }
+
     // 処方箋にOCR結果を反映
     await db.update(prescriptions).set({
       status: "reviewing",
+      ...(patientId ? { patientId } : {}),
       institutionName: result.institution.name,
       institutionCode: result.institution.code,
       institutionAddress: result.institution.address,
