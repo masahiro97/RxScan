@@ -214,6 +214,10 @@ export const prescriptionsRelations = relations(prescriptions, ({ one, many }) =
   ocrResults: many(ocrResults),
 }));
 
+export const prescriptionImagesRelations = relations(prescriptionImages, ({ one }) => ({
+  prescription: one(prescriptions, { fields: [prescriptionImages.prescriptionId], references: [prescriptions.id] }),
+}));
+
 export const prescriptionItemsRelations = relations(prescriptionItems, ({ one }) => ({
   prescription: one(prescriptions, { fields: [prescriptionItems.prescriptionId], references: [prescriptions.id] }),
   medicine: one(medicines, { fields: [prescriptionItems.medicineId], references: [medicines.id] }),
