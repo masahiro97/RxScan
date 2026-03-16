@@ -2,6 +2,7 @@
  * Google Cloud Document AI — テキスト抽出
  * 処方箋画像からテキスト＋テーブル構造を抽出する
  */
+import { v1 } from "@google-cloud/documentai";
 
 interface DocumentAiResult {
   text: string;
@@ -12,6 +13,24 @@ interface DocumentAiResult {
 interface TableResult {
   headers: string[];
   rows: string[][];
+}
+
+// クライアントシングルトン（Lambda warm 時に再初期化しない）
+let _client: v1.DocumentProcessorServiceClient | null = null;
+
+function getClient(): v1.DocumentProcessorServiceClient {
+  if (_client) return _client;
+
+  let clientOptions = {};
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    const creds = JSON.parse(
+      Buffer.from(process.env.GOOGLE_CREDENTIALS_JSON, "base64").toString("utf-8")
+    );
+    clientOptions = { credentials: creds };
+  }
+
+  _client = new v1.DocumentProcessorServiceClient(clientOptions);
+  return _client;
 }
 
 export async function extractTextWithDocumentAi(
@@ -26,21 +45,7 @@ export async function extractTextWithDocumentAi(
     throw new Error("GOOGLE_CLOUD_PROJECT_ID / DOCUMENT_AI_PROCESSOR_ID が未設定です");
   }
 
-  // Dynamic import to avoid module resolution issues when credentials are not set
-  const { DocumentProcessorServiceClient } = await import("@google-cloud/documentai").then(
-    (m) => m.v1
-  );
-
-  // Amplify環境ではファイルパスが使えないためbase64 JSONから直接credentials生成
-  let clientOptions = {};
-  if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    const creds = JSON.parse(
-      Buffer.from(process.env.GOOGLE_CREDENTIALS_JSON, "base64").toString("utf-8")
-    );
-    clientOptions = { credentials: creds };
-  }
-
-  const client = new DocumentProcessorServiceClient(clientOptions);
+  const client = getClient();
   const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
 
   const [result] = await client.processDocument({

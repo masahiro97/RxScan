@@ -6,6 +6,17 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import type { Schema } from "@google/generative-ai";
 import type { PrescriptionOcrResult } from "./types";
 
+// クライアントシングルトン
+let _genAI: GoogleGenerativeAI | null = null;
+
+function getGenAI(): GoogleGenerativeAI {
+  if (_genAI) return _genAI;
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
+  _genAI = new GoogleGenerativeAI(apiKey);
+  return _genAI;
+}
+
 const SYSTEM_PROMPT = `You are a Japanese pharmacy prescription OCR parser. Extract structured data from Japanese prescription text (処方箋) and return valid JSON.
 
 ## Output rules
@@ -38,7 +49,14 @@ Examples:
 - "1日1錠 30日分" → dose/day=1錠, durationDays=30, totalQuantity="30錠"
 - "1回2錠 1日2回 14日分" → dose/day=4錠, durationDays=14, totalQuantity="56錠"
 - If totalQuantity is explicitly printed on the prescription, use that value.
-- If cannot be calculated → null.`;
+- If cannot be calculated → null.
+
+## Self-check before outputting (do not add extra fields)
+1. prescription.date < prescription.expiryDate (if both non-null)
+2. totalQuantity == dosagePerDay × durationDays (recalculate if wrong)
+3. All dates match YYYY-MM-DD format
+4. gender is "male", "female", or null only
+5. copayRatio is 10, 20, 30, or null only`;
 
 export async function parseWithGemini(
   ocrText: string,
@@ -50,16 +68,15 @@ export async function parseWithGemini(
   items: PrescriptionOcrResult["items"];
   overallConfidence: number;
 }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY が未設定です");
-
-  const genAI = new GoogleGenerativeAI(apiKey);
+  const genAI = getGenAI();
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     generationConfig: {
+      thinkingConfig: { thinkingBudget: 0 }, // thinking オフ → 2〜3秒に短縮
       responseMimeType: "application/json",
       responseSchema: buildResponseSchema(),
-    },
+    } as any,
   });
 
   const prompt = `${SYSTEM_PROMPT}

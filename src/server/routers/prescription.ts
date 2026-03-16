@@ -145,8 +145,8 @@ export const prescriptionRouter = router({
         resourceId: rx.id,
       });
 
-      // OCR 非同期実行（バックグラウンド）
-      void runOcrInBackground(rx.id, input.s3Key, input.mimeType, storeId, userId);
+      // OCR 同期実行（Lambda環境でバックグラウンドタスクが kill されるため）
+      await runOcrInBackground(rx.id, input.s3Key, input.mimeType, storeId, userId);
 
       return { id: rx.id, rxNumber };
     }),
