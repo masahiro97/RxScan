@@ -218,6 +218,19 @@ export const prescriptionImagesRelations = relations(prescriptionImages, ({ one 
   prescription: one(prescriptions, { fields: [prescriptionImages.prescriptionId], references: [prescriptions.id] }),
 }));
 
+export const ocrResultsRelations = relations(ocrResults, ({ one }) => ({
+  prescription: one(prescriptions, { fields: [ocrResults.prescriptionId], references: [prescriptions.id] }),
+}));
+
+export const medicinesRelations = relations(medicines, ({ many }) => ({
+  prescriptionItems: many(prescriptionItems),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  store: one(stores, { fields: [auditLogs.storeId], references: [stores.id] }),
+  user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
+}));
+
 export const prescriptionItemsRelations = relations(prescriptionItems, ({ one }) => ({
   prescription: one(prescriptions, { fields: [prescriptionItems.prescriptionId], references: [prescriptions.id] }),
   medicine: one(medicines, { fields: [prescriptionItems.medicineId], references: [medicines.id] }),
