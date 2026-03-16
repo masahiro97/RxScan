@@ -316,36 +316,38 @@ async function runOcrInBackground(
 
     const result = await runOcrPipeline(imageBuffer, mimeType);
 
-    // OCR 結果を保存（textBlocks は rawResponse に格納してフロントエンドへ渡す）
-    await db.insert(ocrResults).values({
-      prescriptionId,
-      rawResponse: { textBlocks: result.meta.textBlocks } as unknown as Record<string, unknown>,
-      parsedData: result as unknown as Record<string, unknown>,
-      confidenceScores: {
-        overall: result.meta.overallConfidence,
-        institution: result.institution.confidence,
-        doctor: result.doctor.confidence,
-        patient: result.patient.confidence,
-      },
-      pipeline: result.meta.pipeline,
-      processingTimeMs: result.meta.processingTimeMs,
-    });
+    const { findMedicineCandidates } = await import("@/server/services/medicine-matcher");
 
-    // 患者情報を upsert（名前がある場合のみ）
-    let patientId: string | undefined;
-    if (result.patient.name) {
-      const existing = await db.query.patients.findFirst({
-        where: and(
-          eq(patients.storeId, storeId),
-          ...(result.patient.insurerNumber && result.patient.insuredNumber
-            ? [eq(patients.insurerNumber, result.patient.insurerNumber),
-               eq(patients.insuredNumber, result.patient.insuredNumber)]
-            : [eq(patients.name, result.patient.name)]),
-        ),
-      });
-      if (existing) {
-        patientId = existing.id;
-      } else {
+    // OCR保存・患者検索・薬品マッチングを並列実行
+    const [, resolvedPatientId, matchedMedicineIds] = await Promise.all([
+      // (1) OCR結果を保存
+      db.insert(ocrResults).values({
+        prescriptionId,
+        rawResponse: { textBlocks: result.meta.textBlocks } as unknown as Record<string, unknown>,
+        parsedData: result as unknown as Record<string, unknown>,
+        confidenceScores: {
+          overall: result.meta.overallConfidence,
+          institution: result.institution.confidence,
+          doctor: result.doctor.confidence,
+          patient: result.patient.confidence,
+        },
+        pipeline: result.meta.pipeline,
+        processingTimeMs: result.meta.processingTimeMs,
+      }),
+
+      // (2) 患者 upsert
+      (async (): Promise<string | undefined> => {
+        if (!result.patient.name) return undefined;
+        const existing = await db.query.patients.findFirst({
+          where: and(
+            eq(patients.storeId, storeId),
+            ...(result.patient.insurerNumber && result.patient.insuredNumber
+              ? [eq(patients.insurerNumber, result.patient.insurerNumber),
+                 eq(patients.insuredNumber, result.patient.insuredNumber)]
+              : [eq(patients.name, result.patient.name)]),
+          ),
+        });
+        if (existing) return existing.id;
         const [newPatient] = await db.insert(patients).values({
           storeId,
           name: result.patient.name,
@@ -357,64 +359,64 @@ async function runOcrInBackground(
           insuranceSymbol: result.patient.insuranceSymbol,
           copayRatio: result.patient.copayRatio,
         }).returning();
-        patientId = newPatient?.id;
-      }
-    }
+        return newPatient?.id;
+      })(),
 
-    // 処方箋にOCR結果を反映
-    await db.update(prescriptions).set({
-      status: "reviewing",
-      ...(patientId ? { patientId } : {}),
-      institutionName: result.institution.name,
-      institutionCode: result.institution.code,
-      institutionAddress: result.institution.address,
-      institutionPhone: result.institution.phone,
-      doctorName: result.doctor.name,
-      doctorDepartment: result.doctor.department,
-      prescribedDate: result.prescription.date,
-      expiryDate: result.prescription.expiryDate,
-      isGenericSubstitutable: result.prescription.isGenericSubstitutable,
-      dispensingNotes: result.prescription.dispensingNotes,
-      ocrConfidenceAvg: result.meta.overallConfidence.toString(),
-      ocrPipeline: result.meta.pipeline,
-      updatedAt: new Date(),
-    }).where(eq(prescriptions.id, prescriptionId));
-
-    // 処方明細を保存（薬品マスタ自動マッチング付き）
-    if (result.items.length > 0) {
-      const { findMedicineCandidates } = await import("@/server/services/medicine-matcher");
-
-      const itemsWithMedicine = await Promise.all(
-        result.items.map(async (item, idx) => {
-          let medicineId: string | undefined;
+      // (3) 薬品名マッチング（全アイテム並列）
+      Promise.all(
+        result.items.map(async (item) => {
           try {
             const candidates = await findMedicineCandidates(item.medicineName, 1);
-            if (candidates[0] && candidates[0].similarity >= 0.5) {
-              medicineId = candidates[0].id;
-            }
+            return (candidates[0]?.similarity ?? 0) >= 0.5 ? candidates[0]!.id : undefined;
           } catch {
-            // マッチング失敗時はスキップ（処方箋保存は継続）
+            return undefined;
           }
-          return {
-            prescriptionId,
-            rpNumber: item.rpNumber,
-            rawMedicineName: item.medicineName,
-            medicineId,
-            isGenericName: item.isGenericName,
-            dosage: item.dosage,
-            administration: item.administration,
-            durationDays: item.durationDays,
-            totalQuantity: item.totalQuantity,
-            isPrn: item.isPrn,
-            notes: item.notes,
-            confidenceScore: item.confidence.toString(),
-            sortOrder: idx,
-          };
         })
-      );
+      ),
+    ]);
 
-      await db.insert(prescriptionItems).values(itemsWithMedicine);
-    }
+    // 処方箋更新・明細保存を並列実行
+    await Promise.all([
+      // (4) 処方箋にOCR結果を反映
+      db.update(prescriptions).set({
+        status: "reviewing",
+        ...(resolvedPatientId ? { patientId: resolvedPatientId } : {}),
+        institutionName: result.institution.name,
+        institutionCode: result.institution.code,
+        institutionAddress: result.institution.address,
+        institutionPhone: result.institution.phone,
+        doctorName: result.doctor.name,
+        doctorDepartment: result.doctor.department,
+        prescribedDate: result.prescription.date,
+        expiryDate: result.prescription.expiryDate,
+        isGenericSubstitutable: result.prescription.isGenericSubstitutable,
+        dispensingNotes: result.prescription.dispensingNotes,
+        ocrConfidenceAvg: result.meta.overallConfidence.toString(),
+        ocrPipeline: result.meta.pipeline,
+        updatedAt: new Date(),
+      }).where(eq(prescriptions.id, prescriptionId)),
+
+      // (5) 処方明細を保存
+      result.items.length > 0
+        ? db.insert(prescriptionItems).values(
+            result.items.map((item, idx) => ({
+              prescriptionId,
+              rpNumber: item.rpNumber,
+              rawMedicineName: item.medicineName,
+              medicineId: matchedMedicineIds[idx],
+              isGenericName: item.isGenericName,
+              dosage: item.dosage,
+              administration: item.administration,
+              durationDays: item.durationDays,
+              totalQuantity: item.totalQuantity,
+              isPrn: item.isPrn,
+              notes: item.notes,
+              confidenceScore: item.confidence.toString(),
+              sortOrder: idx,
+            }))
+          )
+        : Promise.resolve(),
+    ]);
   } catch (err) {
     console.error("[OCR] バックグラウンド処理エラー:", err);
     await db.update(prescriptions).set({ status: "pending", updatedAt: new Date() })
