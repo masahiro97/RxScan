@@ -31,7 +31,16 @@ export async function extractTextWithDocumentAi(
     (m) => m.v1
   );
 
-  const client = new DocumentProcessorServiceClient();
+  // Amplify環境ではファイルパスが使えないためbase64 JSONから直接credentials生成
+  let clientOptions = {};
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    const creds = JSON.parse(
+      Buffer.from(process.env.GOOGLE_CREDENTIALS_JSON, "base64").toString("utf-8")
+    );
+    clientOptions = { credentials: creds };
+  }
+
+  const client = new DocumentProcessorServiceClient(clientOptions);
   const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
 
   const [result] = await client.processDocument({
