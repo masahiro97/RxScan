@@ -316,9 +316,10 @@ async function runOcrInBackground(
 
     const result = await runOcrPipeline(imageBuffer, mimeType);
 
-    // OCR 結果を保存
+    // OCR 結果を保存（textBlocks は rawResponse に格納してフロントエンドへ渡す）
     await db.insert(ocrResults).values({
       prescriptionId,
+      rawResponse: { textBlocks: result.meta.textBlocks } as unknown as Record<string, unknown>,
       parsedData: result as unknown as Record<string, unknown>,
       confidenceScores: {
         overall: result.meta.overallConfidence,
@@ -379,24 +380,40 @@ async function runOcrInBackground(
       updatedAt: new Date(),
     }).where(eq(prescriptions.id, prescriptionId));
 
-    // 処方明細を保存
+    // 処方明細を保存（薬品マスタ自動マッチング付き）
     if (result.items.length > 0) {
-      await db.insert(prescriptionItems).values(
-        result.items.map((item, idx) => ({
-          prescriptionId,
-          rpNumber: item.rpNumber,
-          rawMedicineName: item.medicineName,
-          isGenericName: item.isGenericName,
-          dosage: item.dosage,
-          administration: item.administration,
-          durationDays: item.durationDays,
-          totalQuantity: item.totalQuantity,
-          isPrn: item.isPrn,
-          notes: item.notes,
-          confidenceScore: item.confidence.toString(),
-          sortOrder: idx,
-        }))
+      const { findMedicineCandidates } = await import("@/server/services/medicine-matcher");
+
+      const itemsWithMedicine = await Promise.all(
+        result.items.map(async (item, idx) => {
+          let medicineId: string | undefined;
+          try {
+            const candidates = await findMedicineCandidates(item.medicineName, 1);
+            if (candidates[0] && candidates[0].similarity >= 0.5) {
+              medicineId = candidates[0].id;
+            }
+          } catch {
+            // マッチング失敗時はスキップ（処方箋保存は継続）
+          }
+          return {
+            prescriptionId,
+            rpNumber: item.rpNumber,
+            rawMedicineName: item.medicineName,
+            medicineId,
+            isGenericName: item.isGenericName,
+            dosage: item.dosage,
+            administration: item.administration,
+            durationDays: item.durationDays,
+            totalQuantity: item.totalQuantity,
+            isPrn: item.isPrn,
+            notes: item.notes,
+            confidenceScore: item.confidence.toString(),
+            sortOrder: idx,
+          };
+        })
       );
+
+      await db.insert(prescriptionItems).values(itemsWithMedicine);
     }
   } catch (err) {
     console.error("[OCR] バックグラウンド処理エラー:", err);

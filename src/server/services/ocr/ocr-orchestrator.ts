@@ -51,6 +51,7 @@ export async function runOcrPipeline(
         pipeline: "document-ai+gemini",
         processingTimeMs: Date.now() - start,
         overallConfidence: geminiResult.overallConfidence,
+        textBlocks: docAiResult.textBlocks,
       },
       institution: geminiResult.institution,
       doctor: geminiResult.doctor,

@@ -9,11 +9,13 @@
  */
 import { v1 } from "@google-cloud/documentai";
 import sharp from "sharp";
+import type { TextBlock } from "./types";
 
 interface DocumentAiResult {
   text: string;
   tables: TableResult[];
   formFields: FormField[];
+  textBlocks: TextBlock[];
   confidence: number;
 }
 
@@ -126,6 +128,26 @@ export async function extractTextWithDocumentAi(
     }
   }
 
+  // テキストブロックのバウンディングボックス抽出（PDF ハイライト用）
+  const textBlocks: TextBlock[] = [];
+  for (const [pageIdx, page] of (document.pages ?? []).entries()) {
+    const pageNum = pageIdx + 1;
+    // paragraph レベルで取得（token より粒度が丁度よい）
+    for (const para of page.paragraphs ?? []) {
+      const verts = para.layout?.boundingPoly?.normalizedVertices ?? [];
+      if (verts.length < 4) continue;
+      const xs = verts.map((v) => v.x ?? 0);
+      const ys = verts.map((v) => v.y ?? 0);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      const w = Math.max(...xs) - x;
+      const h = Math.max(...ys) - y;
+      if (w > 0.01 && h > 0.005) {
+        textBlocks.push({ page: pageNum, x, y, w, h });
+      }
+    }
+  }
+
   // 平均信頼度
   const pageConfidences = (document.pages ?? []).map((p) => p.layout?.confidence ?? 0);
   const confidence =
@@ -133,7 +155,7 @@ export async function extractTextWithDocumentAi(
       ? (pageConfidences.reduce((a, b) => a + b, 0) / pageConfidences.length) * 100
       : 0;
 
-  return { text, tables, formFields, confidence };
+  return { text, tables, formFields, textBlocks, confidence };
 }
 
 function extractCellText(

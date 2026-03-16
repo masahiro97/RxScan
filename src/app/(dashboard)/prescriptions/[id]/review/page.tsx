@@ -147,6 +147,7 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
   const overallConfidence = ocrResult
     ? (ocrResult.confidenceScores as { overall?: number } | null)?.overall ?? 0
     : 0;
+  const textBlocks = (ocrResult?.rawResponse as { textBlocks?: { page: number; x: number; y: number; w: number; h: number }[] } | null)?.textBlocks ?? [];
   const isReadOnly = rx.status === "approved" || rx.status === "dispensed";
 
   return (
@@ -220,7 +221,10 @@ export default function ReviewPage({ params }: { params: Promise<{ id: string }>
           {/* 左ペイン: 画像ビューア */}
           <div className="w-1/2 border-r bg-gray-900 flex flex-col">
             {rx.images.length > 0 ? (
-              <ImageViewer images={rx.images as { url: string; pageNumber: number }[]} />
+              <ImageViewer
+                images={rx.images as { url: string; pageNumber: number; mimeType?: string }[]}
+                textBlocks={textBlocks}
+              />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-400">
                 画像なし

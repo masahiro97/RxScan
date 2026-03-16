@@ -90,6 +90,7 @@ export async function parseWithClaudeVision(
       pipeline: "claude-vision-fallback",
       processingTimeMs: Date.now() - start,
       overallConfidence: parsed.overallConfidence,
+      textBlocks: [],
     },
     institution: parsed.institution,
     doctor: parsed.doctor,

@@ -1,8 +1,17 @@
+export interface TextBlock {
+  page: number;   // 1-indexed
+  x: number;      // normalized 0-1 (left)
+  y: number;      // normalized 0-1 (top)
+  w: number;      // normalized width
+  h: number;      // normalized height
+}
+
 export interface PrescriptionOcrResult {
   meta: {
     pipeline: "document-ai+gemini" | "claude-vision-fallback";
     processingTimeMs: number;
     overallConfidence: number;
+    textBlocks: TextBlock[];
   };
   institution: {
     name: string | null;
