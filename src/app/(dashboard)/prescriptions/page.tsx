@@ -12,7 +12,7 @@ import { formatDate } from "@/lib/utils";
 import { StatusIndicator } from "@/components/common/status-indicator";
 import { ConfidenceBadge } from "@/components/prescription/confidence-badge";
 
-type Status = "pending" | "reviewing" | "approved" | "dispensed" | "rejected";
+type Status = "pending" | "reviewing" | "approved" | "rejected";
 
 export default function PrescriptionsPage() {
   const [status, setStatus] = useState<Status | undefined>(undefined);
@@ -56,7 +56,6 @@ export default function PrescriptionsPage() {
             <TabsTrigger value="pending">未確認</TabsTrigger>
             <TabsTrigger value="reviewing">確認中</TabsTrigger>
             <TabsTrigger value="approved">承認済</TabsTrigger>
-            <TabsTrigger value="dispensed">調剤済</TabsTrigger>
             <TabsTrigger value="rejected">却下</TabsTrigger>
           </TabsList>
         </Tabs>
