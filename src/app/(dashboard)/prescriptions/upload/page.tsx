@@ -28,9 +28,10 @@ function useProgressBar(active: boolean) {
 
   useEffect(() => {
     if (!active) {
-      setProgress(0);
+      if (rafRef.current) clearTimeout(rafRef.current);
       return;
     }
+    setProgress(0);
 
     // イージング: 速く始まり 99% 手前でほぼ止まる
     const tick = () => {
