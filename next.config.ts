@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pg", "@google-cloud/documentai", "sharp"],
+  serverExternalPackages: ["pg", "sharp", "@azure/ai-form-recognizer", "@azure/core-auth", "@azure/core-rest-pipeline"],
   env: {
     AUTH_SECRET: process.env.AUTH_SECRET ?? "",
     DATABASE_URL: process.env.DATABASE_URL ?? "",
@@ -10,11 +10,9 @@ const nextConfig: NextConfig = {
     APP_S3_SECRET: process.env.APP_S3_SECRET ?? "",
     S3_BUCKET_NAME: process.env.S3_BUCKET_NAME ?? "",
     S3_BUCKET_REGION: process.env.S3_BUCKET_REGION ?? "",
-    GOOGLE_CLOUD_PROJECT_ID: process.env.GOOGLE_CLOUD_PROJECT_ID ?? "",
-    GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION ?? "",
-    DOCUMENT_AI_PROCESSOR_ID: process.env.DOCUMENT_AI_PROCESSOR_ID ?? "",
     GEMINI_API_KEY: process.env.GEMINI_API_KEY ?? "",
-    GOOGLE_CREDENTIALS_JSON: process.env.GOOGLE_CREDENTIALS_JSON ?? "",
+    AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT: process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT ?? "",
+    AZURE_DOCUMENT_INTELLIGENCE_KEY: process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY ?? "",
   },
 };
 

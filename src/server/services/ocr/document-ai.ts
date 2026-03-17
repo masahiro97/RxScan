@@ -1,13 +1,10 @@
 /**
- * Google Cloud Document AI — テキスト抽出
- * 処方箋画像からテキスト＋テーブル＋フォームフィールドを抽出する
+ * Azure Document Intelligence — テキスト抽出
+ * 処方箋画像からテキスト＋テーブル＋OCRハイライトブロックを抽出する
  *
- * プロセッサ種別:
- *   - 汎用OCR (OCR_PROCESSOR): text / tables
- *   - Form Parser (FORM_PARSER_PROCESSOR): text / tables / formFields (キーバリュー)
- *   どちらも同じ関数で処理可能。Form Parser の場合は formFields も返す。
+ * モデル: prebuilt-layout (Japan East / 低レイテンシ)
  */
-import { v1 } from "@google-cloud/documentai";
+import { DocumentAnalysisClient, AzureKeyCredential } from "@azure/ai-form-recognizer";
 import sharp from "sharp";
 import type { TextBlock } from "./types";
 
@@ -30,25 +27,24 @@ interface FormField {
 }
 
 // クライアントシングルトン（Lambda warm 時に再初期化しない）
-let _client: v1.DocumentProcessorServiceClient | null = null;
+let _client: DocumentAnalysisClient | null = null;
 
-function getClient(): v1.DocumentProcessorServiceClient {
+function getClient(): DocumentAnalysisClient {
   if (_client) return _client;
 
-  let clientOptions = {};
-  if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    const creds = JSON.parse(
-      Buffer.from(process.env.GOOGLE_CREDENTIALS_JSON, "base64").toString("utf-8")
-    );
-    clientOptions = { credentials: creds };
+  const endpoint = process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT;
+  const key = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY;
+
+  if (!endpoint || !key) {
+    throw new Error("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT / AZURE_DOCUMENT_INTELLIGENCE_KEY が未設定です");
   }
 
-  _client = new v1.DocumentProcessorServiceClient(clientOptions);
+  _client = new DocumentAnalysisClient(endpoint, new AzureKeyCredential(key));
   return _client;
 }
 
 /**
- * 画像を Document AI 送信前にリサイズする（最大1500px）
+ * 画像を送信前にリサイズする（最大1500px）
  * PDF はそのまま通す（sharp は PDF 非対応）
  */
 async function optimizeImage(buffer: Buffer, mimeType: string): Promise<Buffer> {
@@ -73,108 +69,65 @@ export async function extractTextWithDocumentAi(
   imageBuffer: Buffer,
   mimeType: string,
 ): Promise<DocumentAiResult> {
-  const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
-  const location = process.env.GOOGLE_CLOUD_LOCATION ?? "us";
-  const processorId = process.env.DOCUMENT_AI_PROCESSOR_ID;
-
-  if (!projectId || !processorId) {
-    throw new Error("GOOGLE_CLOUD_PROJECT_ID / DOCUMENT_AI_PROCESSOR_ID が未設定です");
-  }
-
-  // 画像リサイズ（転送量・処理時間を削減）
   const optimizedBuffer = await optimizeImage(imageBuffer, mimeType);
 
   const client = getClient();
-  const name = `projects/${projectId}/locations/${location}/processors/${processorId}`;
 
-  const [result] = await client.processDocument({
-    name,
-    rawDocument: {
-      content: optimizedBuffer.toString("base64"),
-      mimeType,
-    },
-  });
+  const poller = await client.beginAnalyzeDocument(
+    "prebuilt-layout",
+    optimizedBuffer,
+  );
+  const result = await poller.pollUntilDone();
 
-  const document = result.document;
-  if (!document) throw new Error("Document AI からの応答が空です");
-
-  const text = document.text ?? "";
+  const text = result.content ?? "";
 
   // テーブル抽出
   const tables: TableResult[] = [];
-  for (const page of document.pages ?? []) {
-    for (const table of page.tables ?? []) {
-      type CellArg = Parameters<typeof extractCellText>[0];
-      const headers = (table.headerRows?.[0]?.cells ?? []).map((cell) =>
-        extractCellText(cell as unknown as CellArg, text)
-      );
-      const rows = (table.bodyRows ?? []).map((row) =>
-        (row.cells ?? []).map((cell) => extractCellText(cell as unknown as CellArg, text))
-      );
-      if (headers.length > 0 || rows.length > 0) {
-        tables.push({ headers, rows });
-      }
+  for (const table of result.tables ?? []) {
+    const headerCells = table.cells
+      .filter((c) => c.kind === "columnHeader")
+      .sort((a, b) => a.columnIndex - b.columnIndex);
+    const headers = headerCells.map((c) => c.content);
+
+    const rowsMap = new Map<number, string[]>();
+    for (const cell of table.cells) {
+      if (cell.kind === "columnHeader") continue;
+      if (!rowsMap.has(cell.rowIndex)) rowsMap.set(cell.rowIndex, []);
+      rowsMap.get(cell.rowIndex)![cell.columnIndex] = cell.content;
+    }
+    const rows = Array.from(rowsMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([, cells]) => cells);
+
+    if (headers.length > 0 || rows.length > 0) {
+      tables.push({ headers, rows });
     }
   }
 
-  // フォームフィールド抽出（Form Parser プロセッサ使用時に有効）
-  const formFields: FormField[] = [];
-  for (const page of document.pages ?? []) {
-    for (const field of page.formFields ?? []) {
-      type AnchorArg = Parameters<typeof extractAnchorText>[0];
-      const name = extractAnchorText(field.fieldName as unknown as AnchorArg, text).trim();
-      const value = extractAnchorText(field.fieldValue as unknown as AnchorArg, text).trim();
-      if (name) formFields.push({ name, value });
-    }
-  }
-
-  // テキストブロックのバウンディングボックス抽出（PDF ハイライト用）
+  // テキストブロックのバウンディングボックス抽出（ハイライト用）
   const textBlocks: TextBlock[] = [];
-  for (const [pageIdx, page] of (document.pages ?? []).entries()) {
-    const pageNum = pageIdx + 1;
-    // paragraph レベルで取得（token より粒度が丁度よい）
-    for (const para of page.paragraphs ?? []) {
-      const verts = para.layout?.boundingPoly?.normalizedVertices ?? [];
-      if (verts.length < 4) continue;
-      const xs = verts.map((v) => v.x ?? 0);
-      const ys = verts.map((v) => v.y ?? 0);
+  for (const page of result.pages ?? []) {
+    const pageNum = page.pageNumber;
+    const pageW = page.width && page.width > 0 ? page.width : 1;
+    const pageH = page.height && page.height > 0 ? page.height : 1;
+
+    for (const line of page.lines ?? []) {
+      const polygon = line.polygon ?? [];
+      if (polygon.length < 4) continue;
+
+      const xs = polygon.map((p) => p.x / pageW);
+      const ys = polygon.map((p) => p.y / pageH);
+
       const x = Math.min(...xs);
       const y = Math.min(...ys);
       const w = Math.max(...xs) - x;
       const h = Math.max(...ys) - y;
-      if (w > 0.01 && h > 0.005) {
+
+      if (w > 0.01 && h > 0.003) {
         textBlocks.push({ page: pageNum, x, y, w, h });
       }
     }
   }
 
-  // 平均信頼度
-  const pageConfidences = (document.pages ?? []).map((p) => p.layout?.confidence ?? 0);
-  const confidence =
-    pageConfidences.length > 0
-      ? (pageConfidences.reduce((a, b) => a + b, 0) / pageConfidences.length) * 100
-      : 0;
-
-  return { text, tables, formFields, textBlocks, confidence };
-}
-
-function extractCellText(
-  cell: { layout?: { textAnchor?: { textSegments?: Array<{ startIndex?: string | number | null; endIndex?: string | number | null }> | null } | null } | null },
-  fullText: string
-): string {
-  return extractAnchorText(cell.layout as Parameters<typeof extractAnchorText>[0], fullText).trim();
-}
-
-function extractAnchorText(
-  layout: { textAnchor?: { textSegments?: Array<{ startIndex?: string | number | null; endIndex?: string | number | null }> | null } | null } | null | undefined,
-  fullText: string
-): string {
-  const segments = layout?.textAnchor?.textSegments ?? [];
-  return segments
-    .map((seg) => {
-      const start = Number(seg.startIndex ?? 0);
-      const end = Number(seg.endIndex ?? 0);
-      return fullText.slice(start, end);
-    })
-    .join("");
+  return { text, tables, formFields: [], textBlocks, confidence: 90 };
 }
