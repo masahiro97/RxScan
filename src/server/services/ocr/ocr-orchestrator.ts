@@ -1,13 +1,13 @@
 /**
  * OCR パイプライン統合オーケストレーター
- * Step1: Document AI → Step2: Gemini パース → フォールバック: Claude Vision
+ * Azure DI (textBlocks取得) と Gemini Vision (構造化抽出) を並列実行
  */
 import { extractTextWithDocumentAi } from "./document-ai";
-import { parseWithGemini } from "./gemini-parser";
+import { parseWithGeminiVision } from "./gemini-parser";
 import { parseWithClaudeVision } from "./claude-vision-fallback";
 import type { PrescriptionOcrResult } from "./types";
 
-const FALLBACK_THRESHOLD = 60; // 全体信頼度がこれ未満ならフォールバック
+const FALLBACK_THRESHOLD = 60;
 
 export async function runOcrPipeline(
   imageBuffer: Buffer,
@@ -16,42 +16,24 @@ export async function runOcrPipeline(
   const start = Date.now();
 
   try {
-    // Step 1: Document AI でテキスト抽出（画像は自動リサイズ済み）
-    const docAiResult = await extractTextWithDocumentAi(imageBuffer, mimeType);
+    // Azure DI (textBlocks) と Gemini Vision (構造化抽出) を同時実行
+    const [azureResult, geminiResult] = await Promise.all([
+      extractTextWithDocumentAi(imageBuffer, mimeType),
+      parseWithGeminiVision(imageBuffer, mimeType),
+    ]);
 
-    // Document AI の信頼度が低すぎる場合はフォールバック
-    if (docAiResult.confidence < FALLBACK_THRESHOLD) {
-      console.log(`Document AI 信頼度 ${docAiResult.confidence.toFixed(1)}% < ${FALLBACK_THRESHOLD}% → Claude Vision フォールバック`);
-      return await parseWithClaudeVision(imageBuffer, mimeType);
-    }
-
-    // Step 2: テーブルデータ整形
-    const tableText = docAiResult.tables
-      .map((t, i) =>
-        `テーブル${i + 1}:\nヘッダー: ${t.headers.join(" | ")}\n${t.rows.map((r) => r.join(" | ")).join("\n")}`
-      )
-      .join("\n\n");
-
-    // Form Parser のフォームフィールド整形（Form Parser 使用時のみ値あり）
-    const formFieldText = docAiResult.formFields.length > 0
-      ? docAiResult.formFields.map((f) => `${f.name}: ${f.value}`).join("\n")
-      : "";
-
-    // Step 3: Gemini でパース（thinking オフ・整合性チェック込み）
-    const geminiResult = await parseWithGemini(docAiResult.text, tableText, formFieldText);
-
-    // Gemini パース後も信頼度が低ければフォールバック
+    // 信頼度が低すぎる場合はフォールバック
     if (geminiResult.overallConfidence < FALLBACK_THRESHOLD) {
-      console.log(`Gemini 信頼度 ${geminiResult.overallConfidence}% < ${FALLBACK_THRESHOLD}% → Claude Vision フォールバック`);
+      console.log(`Gemini Vision 信頼度 ${geminiResult.overallConfidence}% < ${FALLBACK_THRESHOLD}% → Claude Vision フォールバック`);
       return await parseWithClaudeVision(imageBuffer, mimeType);
     }
 
     return {
       meta: {
-        pipeline: "document-ai+gemini",
+        pipeline: "azure-read+gemini-vision-parallel",
         processingTimeMs: Date.now() - start,
         overallConfidence: geminiResult.overallConfidence,
-        textBlocks: docAiResult.textBlocks,
+        textBlocks: azureResult.textBlocks,
       },
       institution: geminiResult.institution,
       doctor: geminiResult.doctor,
@@ -70,7 +52,7 @@ export async function runOcrPipeline(
       items: geminiResult.items,
     };
   } catch (err) {
-    console.error("通常OCRパイプラインエラー:", err);
+    console.error("並列OCRパイプラインエラー:", err);
     return await parseWithClaudeVision(imageBuffer, mimeType);
   }
 }

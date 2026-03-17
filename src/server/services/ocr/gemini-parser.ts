@@ -1,8 +1,8 @@
 /**
- * Gemini 2.5 Flash — Document AI のテキスト出力を処方箋 JSON に構造化パース
- * 画像は送らず、テキストのみ → コスト最小化
+ * Gemini 2.5 Flash — 処方箋テキスト or 画像を構造化 JSON にパース
  */
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import sharp from "sharp";
 import type { Schema } from "@google/generative-ai";
 import type { PrescriptionOcrResult } from "./types";
 
@@ -58,17 +58,57 @@ Examples:
 4. gender is "male", "female", or null only
 5. copayRatio is 10, 20, 30, or null only`;
 
-export async function parseWithGemini(
-  ocrText: string,
-  tableData: string,
-  formFieldData = "",
-): Promise<PrescriptionOcrResult["patient"] & {
+type GeminiParseResult = PrescriptionOcrResult["patient"] & {
   institution: PrescriptionOcrResult["institution"];
   doctor: PrescriptionOcrResult["doctor"];
   prescription: PrescriptionOcrResult["prescription"];
   items: PrescriptionOcrResult["items"];
   overallConfidence: number;
-}> {
+};
+
+/** 画像を Gemini に直接送信して構造化抽出（並列OCR用）*/
+export async function parseWithGeminiVision(
+  imageBuffer: Buffer,
+  mimeType: string,
+): Promise<GeminiParseResult> {
+  const genAI = getGenAI();
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    generationConfig: {
+      thinkingConfig: { thinkingBudget: 0 },
+      responseMimeType: "application/json",
+      responseSchema: buildResponseSchema(),
+    } as any,
+  });
+
+  // PDF はそのまま、画像は最大 1500px にリサイズ
+  let optimized = imageBuffer;
+  if (mimeType !== "application/pdf") {
+    const img = sharp(imageBuffer);
+    const meta = await img.metadata();
+    const maxDim = 1500;
+    const w = meta.width ?? 0;
+    const h = meta.height ?? 0;
+    if (w > maxDim || h > maxDim) {
+      const ratio = Math.min(maxDim / w, maxDim / h);
+      optimized = await img.resize(Math.round(w * ratio), Math.round(h * ratio)).toBuffer();
+    }
+  }
+
+  const result = await model.generateContent([
+    { text: SYSTEM_PROMPT + "\n\n上記の処方箋画像を解析してJSONで返してください。" },
+    { inlineData: { data: optimized.toString("base64"), mimeType } },
+  ]);
+
+  return JSON.parse(result.response.text()) as GeminiParseResult;
+}
+
+export async function parseWithGemini(
+  ocrText: string,
+  tableData: string,
+  formFieldData = "",
+): Promise<GeminiParseResult> {
   const genAI = getGenAI();
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash",

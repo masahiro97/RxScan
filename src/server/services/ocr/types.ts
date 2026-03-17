@@ -8,7 +8,7 @@ export interface TextBlock {
 
 export interface PrescriptionOcrResult {
   meta: {
-    pipeline: "document-ai+gemini" | "claude-vision-fallback";
+    pipeline: "document-ai+gemini" | "azure-read+gemini-vision-parallel" | "claude-vision-fallback";
     processingTimeMs: number;
     overallConfidence: number;
     textBlocks: TextBlock[];

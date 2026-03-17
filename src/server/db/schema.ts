@@ -21,7 +21,7 @@ export const prescriptionStatusEnum = pgEnum("prescription_status", [
 ]);
 export const genderEnum = pgEnum("gender", ["male", "female"]);
 export const ocrPipelineEnum = pgEnum("ocr_pipeline", [
-  "document-ai+gemini", "claude-vision-fallback",
+  "document-ai+gemini", "azure-read+gemini-vision-parallel", "claude-vision-fallback",
 ]);
 
 // ── Stores ─────────────────────────────────────────────────────────────────
