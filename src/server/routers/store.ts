@@ -12,6 +12,32 @@ export const storeRouter = router({
     return db.query.stores.findFirst({ where: eq(stores.id, storeId) });
   }),
 
+  list: adminProcedure.query(async () => {
+    return db.query.stores.findMany({ orderBy: stores.createdAt });
+  }),
+
+  create: adminProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      address: z.string().optional(),
+      phone: z.string().optional(),
+      licenseNumber: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const [store] = await db.insert(stores).values(input).returning();
+      return store;
+    }),
+
+  delete: adminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.session.user.storeId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "現在の店舗は削除できません" });
+      }
+      await db.delete(stores).where(eq(stores.id, input.id));
+      return { success: true };
+    }),
+
   update: adminProcedure
     .input(z.object({
       name: z.string().min(1),

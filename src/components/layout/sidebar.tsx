@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  Activity,
   FileText,
   ScanLine,
   User,
@@ -14,11 +13,6 @@ import {
 } from "lucide-react";
 
 const navSections = [
-  {
-    items: [
-      { href: "/", label: "ダッシュボード", icon: Activity },
-    ],
-  },
   {
     label: "処方箋管理",
     items: [
