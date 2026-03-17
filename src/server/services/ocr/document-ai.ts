@@ -74,35 +74,15 @@ export async function extractTextWithDocumentAi(
   const client = getClient();
 
   const poller = await client.beginAnalyzeDocument(
-    "prebuilt-layout",
+    "prebuilt-read",
     optimizedBuffer,
   );
   const result = await poller.pollUntilDone();
 
   const text = result.content ?? "";
 
-  // テーブル抽出
+  // prebuilt-read はテーブル非対応（Gemini が構造化を担当するため不要）
   const tables: TableResult[] = [];
-  for (const table of result.tables ?? []) {
-    const headerCells = table.cells
-      .filter((c) => c.kind === "columnHeader")
-      .sort((a, b) => a.columnIndex - b.columnIndex);
-    const headers = headerCells.map((c) => c.content);
-
-    const rowsMap = new Map<number, string[]>();
-    for (const cell of table.cells) {
-      if (cell.kind === "columnHeader") continue;
-      if (!rowsMap.has(cell.rowIndex)) rowsMap.set(cell.rowIndex, []);
-      rowsMap.get(cell.rowIndex)![cell.columnIndex] = cell.content;
-    }
-    const rows = Array.from(rowsMap.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([, cells]) => cells);
-
-    if (headers.length > 0 || rows.length > 0) {
-      tables.push({ headers, rows });
-    }
-  }
 
   // テキストブロックのバウンディングボックス抽出（ハイライト用）
   const textBlocks: TextBlock[] = [];
